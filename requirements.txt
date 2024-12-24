@@ -1,0 +1,4 @@
+flask
+selenium
+google-cloud-speech
+pyaudio
