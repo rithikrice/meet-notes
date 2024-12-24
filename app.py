@@ -11,6 +11,8 @@ from google.cloud import speech
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 import os
+import chromedriver_autoinstaller
+chromedriver_autoinstaller.install()  # Installs the correct version
 
 app = Flask(__name__)
 
@@ -20,6 +22,7 @@ FORMAT = pyaudio.paInt16
 CHANNELS = 2
 RATE = 44100
 WAVE_OUTPUT_FILENAME = "meeting_audio.wav"
+recording_event = threading.Event()
 
 def record_audio():
     audio = pyaudio.PyAudio()
@@ -29,14 +32,17 @@ def record_audio():
     frames = []
 
     print("Recording started...")
-    while recording:
-        data = stream.read(CHUNK)
-        frames.append(data)
-
-    print("Recording stopped.")
-    stream.stop_stream()
-    stream.close()
-    audio.terminate()
+    try:
+        while recording_event.is_set():
+            data = stream.read(CHUNK)
+            frames.append(data)
+    except Exception as e:
+        print(f"Error during recording: {e}")
+    finally:
+        print("Recording stopped.")
+        stream.stop_stream()
+        stream.close()
+        audio.terminate()
 
     with wave.open(WAVE_OUTPUT_FILENAME, 'wb') as wf:
         wf.setnchannels(CHANNELS)
@@ -44,13 +50,15 @@ def record_audio():
         wf.setframerate(RATE)
         wf.writeframes(b''.join(frames))
 
+
 def join_meeting(link):
     chrome_options = webdriver.ChromeOptions()
     chrome_options.add_argument('--no-sandbox')
     chrome_options.add_argument('--headless')  # Run in headless mode
     chrome_options.add_argument('--disable-dev-shm-usage')
-    
-    service = Service('/usr/local/bin/chromedriver')  # Path to ChromeDriver
+    chrome_options.add_argument('--window-size=1920,1080')
+
+    service = Service(chromedriver_autoinstaller.install())
     driver = webdriver.Chrome(service=service, options=chrome_options)
     driver.get(link)
 
@@ -84,28 +92,27 @@ def transcribe_audio():
 
 @app.route('/join_meeting', methods=['POST'])
 def handle_meeting():
-    global recording
-    recording = True
-
     data = request.json
     meeting_link = data.get('meeting_link')
     flash_api_key = data.get('flash_api_key')
+    duration = data.get('duration', 60)  # Default to 60 seconds
 
     if not meeting_link or not flash_api_key:
         return jsonify({"error": "Meeting link and Flash API key are required."}), 400
 
     # Start recording audio in a separate thread
+    recording_event.set()
     recorder_thread = threading.Thread(target=record_audio)
     recorder_thread.start()
 
     # Join the meeting
     driver = join_meeting(meeting_link)
 
-    # Simulate meeting duration (e.g., 60 seconds)
-    time.sleep(60)
+    # Simulate meeting duration
+    time.sleep(duration)
     
     # Stop recording
-    recording = False
+    recording_event.clear()
     recorder_thread.join()
 
     # Quit the browser
