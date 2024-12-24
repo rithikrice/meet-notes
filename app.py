@@ -92,39 +92,48 @@ def transcribe_audio():
 
 @app.route('/join_meeting', methods=['POST'])
 def handle_meeting():
-    data = request.json
-    meeting_link = data.get('meeting_link')
-    flash_api_key = data.get('flash_api_key')
-    duration = data.get('duration', 60)  # Default to 60 seconds
+    try:
+        global recording
+        recording = True
 
-    if not meeting_link or not flash_api_key:
-        return jsonify({"error": "Meeting link and Flash API key are required."}), 400
+        data = request.json
+        meeting_link = data.get('meeting_link')
+        flash_api_key = data.get('flash_api_key')
 
-    # Start recording audio in a separate thread
-    recording_event.set()
-    recorder_thread = threading.Thread(target=record_audio)
-    recorder_thread.start()
+        if not meeting_link or not flash_api_key:
+            return jsonify({"error": "Meeting link and Flash API key are required."}), 400
 
-    # Join the meeting
-    driver = join_meeting(meeting_link)
+        app.logger.info(f"Meeting Link: {meeting_link}")
+        app.logger.info(f"Flash API Key: {flash_api_key}")
 
-    # Simulate meeting duration
-    time.sleep(duration)
-    
-    # Stop recording
-    recording_event.clear()
-    recorder_thread.join()
+        # Start recording audio in a separate thread
+        recorder_thread = threading.Thread(target=record_audio)
+        recorder_thread.start()
 
-    # Quit the browser
-    driver.quit()
+        # Join the meeting
+        driver = join_meeting(meeting_link)
 
-    # Transcribe the recorded audio
-    transcript = transcribe_audio()
+        # Simulate meeting duration (e.g., 60 seconds)
+        time.sleep(60)
 
-    # Send transcript to Flash API for summarization (Placeholder)
-    summary = f"[Simulated Summary] {transcript[:100]}..."
+        # Stop recording
+        recording = False
+        recorder_thread.join()
 
-    return jsonify({"transcript": transcript, "summary": summary}), 200
+        # Quit the browser
+        driver.quit()
+
+        # Transcribe the recorded audio
+        transcript = transcribe_audio()
+
+        # Send transcript to Flash API for summarization (Placeholder)
+        summary = f"[Simulated Summary] {transcript[:100]}..."
+
+        return jsonify({"transcript": transcript, "summary": summary}), 200
+
+    except Exception as e:
+        app.logger.error(f"Error: {e}")
+        return jsonify({"error": "Internal server error"}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
