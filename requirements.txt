@@ -2,3 +2,4 @@ flask
 selenium
 google-cloud-speech
 pyaudio
+chromedriver-autoinstaller
